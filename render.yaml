@@ -1,0 +1,58 @@
+# Render Blueprint：一鍵建立 PostgreSQL + 後端 Web Service + 前端 Static Site
+# 部署方式：將整個 repo push 到 GitHub → Render Dashboard → New → Blueprint → 選此 repo
+databases:
+  - name: travel-db
+    plan: free
+    databaseName: travel
+    user: travel
+
+services:
+  # ---- 後端 FastAPI ----
+  - type: web
+    name: travel-backend
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: travel-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # Render 自動產生隨機值
+      - key: ENV
+        value: production
+      - key: NVIDIA_API_KEY
+        sync: false # 部署後在 Dashboard 手動填入真正金鑰
+      - key: NVIDIA_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b
+      - key: FRONTEND_URL
+        sync: false # 填前端 Static Site 的網址，例如 https://travel-frontend.onrender.com
+      # 寄信服務（選填，未填則寄信退回 log）
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+  # ---- 前端 React 靜態站 ----
+  - type: web
+    name: travel-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false # 填後端網址，例如 https://travel-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -1,0 +1,152 @@
+"""NVIDIA AI 行程生成服務（由使用者測試碼重構）。
+
+重點：
+- 金鑰、base_url、模型名稱全部走 settings（環境變數），不寫死。
+- 保留原本 enable_thinking 設定；因此回傳可能夾帶 reasoning 或 markdown
+  code fence，需用 extract_json() 穩健解析。
+- 用 Pydantic 驗證輸出格式，不符就重試一次（溫度調低）。
+"""
+import json
+import logging
+import re
+
+from openai import OpenAI
+from pydantic import ValidationError
+
+from app.config import settings
+from app.schemas.itinerary import ItinerarySegment
+
+logger = logging.getLogger("app.ai_planner")
+
+_client: OpenAI | None = None
+
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        _client = OpenAI(
+            base_url=settings.NVIDIA_BASE_URL,
+            api_key=settings.NVIDIA_API_KEY,
+        )
+    return _client
+
+
+SYSTEM_PROMPT = """你是一位專業的全球旅遊行程規劃師。
+請根據使用者提供的地點、天數、預算與偏好，規劃出合理且可執行的每日行程。
+
+規則：
+1. 必須涵蓋每一天（day 從 1 編號到指定天數），每天安排數個時段。
+2. 行程要符合地理動線，相鄰景點盡量就近，避免不合理的來回奔波。
+3. 每個段落的 description 需簡述活動內容，並包含「交通方式與移動邏輯」（例如：搭捷運/步行/開車約幾分鐘）。
+4. 若地點位於台灣，請盡量融入當地的「特色老街」與「在地秘境」，而非只有熱門大景點。
+5. 若為國際城市，請安排該城市的代表性景點與在地體驗。
+6. 請考量使用者的預算與偏好來取捨景點與餐飲等級。
+
+輸出格式（極重要）：
+- 只回傳一個 JSON 陣列，不要有任何說明文字、前後綴或 markdown。
+- 陣列每個元素為物件，欄位固定為：day (整數), time (字串), location (字串), description (字串)。
+範例：
+[{"day":1,"time":"09:00","location":"範例景點","description":"活動說明，含交通方式"}]
+"""
+
+
+def _build_user_prompt(
+    location: str, days: int, budget: str | None, preferences: str | None
+) -> str:
+    parts = [f"我要去【{location}】玩【{days}】天。"]
+    if budget:
+        parts.append(f"我的預算是：{budget}。")
+    if preferences:
+        parts.append(f"我的偏好是：{preferences}。")
+    parts.append("請依規則幫我規劃完整行程，並只回傳 JSON 陣列。")
+    return "".join(parts)
+
+
+def extract_json(content: str):
+    """從模型輸出中穩健萃取 JSON（陣列或物件皆可）。
+
+    處理情況：純 JSON、被 ```json ``` 圍欄包住、前後夾帶 reasoning 文字。
+    回傳 list 或 dict（由內容決定）。
+    """
+    if not content:
+        raise ValueError("模型回傳為空")
+
+    text = content.strip()
+
+    # 1) 去除 markdown code fence
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+
+    # 2) 直接嘗試解析
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 3) 從最先出現的 [ 或 { 抓到對應的結尾（容忍前後雜訊/思考文字）
+    opens = [i for i in (text.find("["), text.find("{")) if i != -1]
+    if opens:
+        start = min(opens)
+        close_ch = "]" if text[start] == "[" else "}"
+        end = text.rfind(close_ch)
+        if end > start:
+            return json.loads(text[start : end + 1])
+
+    raise ValueError("無法從模型輸出解析出 JSON")
+
+
+def _call_model(
+    location: str,
+    days: int,
+    budget: str | None,
+    preferences: str | None,
+    temperature: float,
+) -> str:
+    completion = _get_client().chat.completions.create(
+        model=settings.NVIDIA_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": _build_user_prompt(location, days, budget, preferences),
+            },
+        ],
+        temperature=temperature,
+        top_p=0.95,
+        max_tokens=4096,
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": True},
+            "reasoning_budget": 2048,
+        },
+        stream=False,
+    )
+    return completion.choices[0].message.content or ""
+
+
+def generate_itinerary(
+    location: str,
+    days: int,
+    budget: str | None = None,
+    preferences: str | None = None,
+) -> list[dict]:
+    """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
+
+    回傳通過 Pydantic 驗證的行程段落 list[dict]。失敗時拋出 ValueError。
+    """
+    last_error: Exception | None = None
+    # 第一次正常溫度，失敗後降溫重試一次
+    for attempt, temperature in enumerate((0.7, 0.2)):
+        try:
+            raw = _call_model(location, days, budget, preferences, temperature)
+            data = extract_json(raw)
+            if not isinstance(data, list) or not data:
+                raise ValueError("行程內容為空或格式非陣列")
+            # 逐段驗證並正規化
+            segments = [ItinerarySegment(**item).model_dump() for item in data]
+            return segments
+        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+            last_error = exc
+            logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
+
+    raise ValueError(f"AI 行程生成失敗：{last_error}")
