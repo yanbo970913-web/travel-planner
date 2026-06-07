@@ -14,6 +14,8 @@ app = FastAPI(title=settings.APP_NAME)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    # 額外放行任何 Render 網域，避免前端網址尾碼變動就壞掉
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -28,27 +28,23 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-12 px-4">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold mb-6">重設密碼</h1>
+    <div className="auth-shell">
+      <div className="card p-8">
+        <h1 className="text-2xl font-bold mb-6 text-white">重設密碼</h1>
         {!token ? (
-          <p className="text-red-600 text-sm">缺少重設 token，請重新申請。</p>
+          <p className="text-red-300 text-sm">缺少重設 token，請重新申請。</p>
         ) : done ? (
-          <div className="text-sm text-green-700 bg-green-50 rounded-md p-4">
+          <div className="alert-success">
             {done}
             <div className="mt-3">
-              <Link to="/login" className="text-brand-600 font-medium">
+              <Link to="/login" className="link font-medium">
                 前往登入 →
               </Link>
             </div>
           </div>
         ) : (
           <>
-            {error && (
-              <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-md p-3">
-                {error}
-              </div>
-            )}
+            {error && <div className="alert-error mb-4">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="password"
@@ -57,14 +53,10 @@ export default function ResetPassword() {
                 placeholder="新密碼（至少 8 碼）"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="input"
               />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-600 text-white py-2.5 rounded-md font-medium hover:bg-brand-700 disabled:opacity-60"
-              >
-                {loading ? '送出中…' : '設定新密碼'}
+              <button type="submit" disabled={loading} className="btn-primary w-full">
+                {loading ? <><span className="spinner" /> 送出中…</> : '設定新密碼'}
               </button>
             </form>
           </>

@@ -24,9 +24,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-1">規劃你的旅程</h1>
-      <p className="text-slate-500 mb-6">
+    <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in">
+      <h1 className="text-3xl font-bold mb-1 text-white">規劃你的旅程</h1>
+      <p className="text-slate-400 mb-6">
         輸入目的地與偏好，AI 會為你排定每日行程與交通動線。
       </p>
 
@@ -34,32 +34,23 @@ export default function Dashboard() {
         <ItineraryForm onSubmit={handleGenerate} loading={loading} />
 
         <div>
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 rounded-md p-4 mb-4">
-              {error}
-            </div>
-          )}
+          {error && <div className="alert-error mb-4">{error}</div>}
           {loading && (
-            <div className="text-center text-slate-500 py-12">
-              AI 正在規劃行程，請稍候…
+            <div className="card p-10 text-center text-slate-400">
+              <span className="spinner mb-3" />
+              <div>AI 正在規劃行程，請稍候…</div>
             </div>
           )}
           {result ? (
             <>
-              <div className="text-sm text-green-700 bg-green-50 rounded-md p-3 mb-4">
-                已產生並儲存到你的歷史行程！
-              </div>
+              <div className="alert-success mb-4">已產生並儲存到你的歷史行程！</div>
               <ItineraryView itinerary={result} />
               <div className="mt-6">
                 <PikminAdvice location={result.location} />
               </div>
             </>
           ) : (
-            !loading && (
-              <div className="text-center text-slate-400 py-12 border-2 border-dashed border-slate-200 rounded-xl">
-                行程結果會顯示在這裡
-              </div>
-            )
+            !loading && <div className="empty">行程結果會顯示在這裡</div>
           )}
         </div>
       </div>

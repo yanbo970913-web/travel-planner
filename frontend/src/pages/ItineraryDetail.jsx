@@ -19,15 +19,17 @@ export default function ItineraryDetail() {
   }, [id])
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <Link to="/history" className="text-sm text-brand-600 hover:underline">
+    <div className="max-w-3xl mx-auto px-4 py-8 animate-fade-in">
+      <Link to="/history" className="link text-sm">
         ← 返回歷史行程
       </Link>
       <div className="mt-4">
         {loading ? (
-          <p className="text-slate-500">載入中…</p>
+          <div className="flex justify-center py-16">
+            <span className="spinner" />
+          </div>
         ) : error ? (
-          <p className="text-red-600">{error}</p>
+          <div className="alert-error">{error}</div>
         ) : (
           <>
             <ItineraryView itinerary={itinerary} />

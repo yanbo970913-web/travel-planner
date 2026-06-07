@@ -1,62 +1,75 @@
+import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
-import Dashboard from './pages/Dashboard'
-import ForgotPassword from './pages/ForgotPassword'
-import History from './pages/History'
-import ItineraryDetail from './pages/ItineraryDetail'
-import Login from './pages/Login'
-import Pikmin from './pages/Pikmin'
-import Register from './pages/Register'
-import ResetPassword from './pages/ResetPassword'
-import VerifyEmail from './pages/VerifyEmail'
+
+// 路由 lazy load：縮小首屏 bundle、加快載入
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const History = lazy(() => import('./pages/History'))
+const ItineraryDetail = lazy(() => import('./pages/ItineraryDetail'))
+const Login = lazy(() => import('./pages/Login'))
+const Pikmin = lazy(() => import('./pages/Pikmin'))
+const Register = lazy(() => import('./pages/Register'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <span className="spinner" />
+    </div>
+  )
+}
 
 export default function App() {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <Routes>
-        {/* 公開頁面 */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          {/* 公開頁面 */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* 需登入 */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <ProtectedRoute>
-              <History />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/pikmin"
-          element={
-            <ProtectedRoute>
-              <Pikmin />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/itinerary/:id"
-          element={
-            <ProtectedRoute>
-              <ItineraryDetail />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+          {/* 需登入 */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <History />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pikmin"
+            element={
+              <ProtectedRoute>
+                <Pikmin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/itinerary/:id"
+            element={
+              <ProtectedRoute>
+                <ItineraryDetail />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Suspense>
     </div>
   )
 }

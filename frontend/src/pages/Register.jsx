@@ -24,25 +24,21 @@ export default function Register() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-12 px-4">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <h1 className="text-2xl font-bold mb-6">註冊</h1>
+    <div className="auth-shell">
+      <div className="card p-8">
+        <h1 className="text-2xl font-bold mb-6 text-white">註冊</h1>
         {done ? (
-          <div className="text-sm text-green-700 bg-green-50 rounded-md p-4">
+          <div className="alert-success">
             {done}
             <div className="mt-3">
-              <Link to="/login" className="text-brand-600 font-medium">
+              <Link to="/login" className="link font-medium">
                 前往登入 →
               </Link>
             </div>
           </div>
         ) : (
           <>
-            {error && (
-              <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-md p-3">
-                {error}
-              </div>
-            )}
+            {error && <div className="alert-error mb-4">{error}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="email"
@@ -50,7 +46,7 @@ export default function Register() {
                 placeholder="電子信箱"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="input"
               />
               <input
                 type="password"
@@ -59,19 +55,15 @@ export default function Register() {
                 placeholder="密碼（至少 8 碼）"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="input"
               />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-600 text-white py-2.5 rounded-md font-medium hover:bg-brand-700 disabled:opacity-60"
-              >
-                {loading ? '註冊中…' : '註冊'}
+              <button type="submit" disabled={loading} className="btn-primary w-full">
+                {loading ? <><span className="spinner" /> 註冊中…</> : '註冊'}
               </button>
             </form>
-            <p className="mt-4 text-sm text-slate-500">
+            <p className="mt-4 text-sm text-slate-400">
               已有帳號？{' '}
-              <Link to="/login" className="text-brand-600 hover:underline">
+              <Link to="/login" className="link">
                 登入
               </Link>
             </p>

@@ -12,9 +12,9 @@ export default function Pikmin() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-1">🌸 皮克敏探索</h1>
-      <p className="text-slate-500 mb-6">
+    <div className="max-w-2xl mx-auto px-4 py-8 animate-fade-in">
+      <h1 className="text-3xl font-bold mb-1 text-white">🌸 皮克敏探索</h1>
+      <p className="text-slate-400 mb-6">
         Pikmin Bloom 玩家專用：查詢目的地有哪些特別 / 地區限定皮克敏。
       </p>
 
@@ -23,12 +23,9 @@ export default function Pikmin() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="輸入地點，例如：東京、台南、巴黎"
-          className="flex-1 border border-slate-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lime-500"
+          className="input flex-1"
         />
-        <button
-          type="submit"
-          className="bg-lime-600 text-white px-5 py-2 rounded-md font-medium hover:bg-lime-700"
-        >
+        <button type="submit" className="btn-lime">
           查詢
         </button>
       </form>
@@ -37,9 +34,7 @@ export default function Pikmin() {
         // 以 query 為 key，換地點時重新載入
         <PikminAdvice key={query} location={query} autoLoad />
       ) : (
-        <div className="text-center text-slate-400 py-12 border-2 border-dashed border-slate-200 rounded-xl">
-          輸入地點開始查詢
-        </div>
+        <div className="empty">輸入地點開始查詢</div>
       )}
     </div>
   )

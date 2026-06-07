@@ -30,17 +30,18 @@ export default function VerifyEmail() {
   }, [params])
 
   return (
-    <div className="max-w-md mx-auto mt-12 px-4 text-center">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        {status === 'verifying' && <p className="text-slate-500">驗證中…</p>}
+    <div className="auth-shell">
+      <div className="card p-8 text-center">
+        {status === 'verifying' && (
+          <p className="text-slate-400 inline-flex items-center gap-2 justify-center">
+            <span className="spinner" /> 驗證中…
+          </p>
+        )}
         {status === 'success' && (
           <>
             <div className="text-4xl mb-3">✅</div>
-            <p className="text-green-700">{message}</p>
-            <Link
-              to="/login"
-              className="inline-block mt-5 bg-brand-600 text-white px-5 py-2 rounded-md"
-            >
+            <p className="text-emerald-300">{message}</p>
+            <Link to="/login" className="btn-primary mt-5">
               前往登入
             </Link>
           </>
@@ -48,8 +49,8 @@ export default function VerifyEmail() {
         {status === 'error' && (
           <>
             <div className="text-4xl mb-3">⚠️</div>
-            <p className="text-red-600">{message}</p>
-            <Link to="/login" className="inline-block mt-5 text-brand-600">
+            <p className="text-red-300">{message}</p>
+            <Link to="/login" className="link inline-block mt-5">
               返回登入
             </Link>
           </>
