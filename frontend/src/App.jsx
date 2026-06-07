@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
+import RouteTitle from './components/RouteTitle'
 
 // 路由 lazy load：縮小首屏 bundle、加快載入
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -25,8 +26,10 @@ function PageFallback() {
 
 export default function App() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
+      <RouteTitle />
       <Navbar />
+      <main className="flex-1">
       <Suspense fallback={<PageFallback />}>
         <Routes>
           {/* 公開頁面 */}
@@ -72,6 +75,10 @@ export default function App() {
           />
         </Routes>
       </Suspense>
+      </main>
+      <footer className="border-t border-slate-800 py-5 text-center text-xs text-slate-500">
+        ✈️ 自動化行程規劃系統 · Powered by NVIDIA Nemotron AI
+      </footer>
     </div>
   )
 }
