@@ -164,9 +164,47 @@ def _call_model(
 # 兩次嘗試：皆關閉思考模式 + 串流接收（避免整包逾時）。
 # max_seconds 控制每次上限；總時長 ~115 秒，確保 < 2 分鐘且穩定有結果。
 _ATTEMPTS = (
-    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=60.0, max_seconds=90.0),
-    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=40.0, max_seconds=25.0),
+    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=55.0, max_seconds=60.0),
+    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=25.0, max_seconds=25.0),
 )
+
+
+def _fallback_itinerary(
+    location: str, days: int, origin: str | None = None
+) -> list[dict]:
+    """AI 全部失敗時的保底行程（本地產生，保證有結果、絕不報錯）。"""
+    segments: list[dict] = []
+    for d in range(1, days + 1):
+        if d == 1 and origin:
+            segments.append(
+                {
+                    "day": 1,
+                    "time": "08:00",
+                    "location": f"從 {origin} 出發",
+                    "description": (
+                        f"從 {origin} 前往 {location}，可搭乘高鐵／台鐵／客運或自行開車，"
+                        "抵達後寄放行李、展開行程。"
+                    ),
+                }
+            )
+        slots = [
+            ("09:30", f"{location} 代表性景點", "走訪當地最具代表性的景點，認識在地特色。"),
+            ("12:00", "在地特色午餐", "品嚐當地特色美食與小吃。"),
+            ("14:30", f"{location} 老街／文化景點", "漫步老街或文化景點，體驗在地風情與選購伴手禮。"),
+            ("18:00", "夜市／晚餐", "享用晚餐，並逛逛附近夜市或商圈。"),
+        ]
+        for t, loc, desc in slots:
+            segments.append({"day": d, "time": t, "location": loc, "description": desc})
+        if d == days and origin:
+            segments.append(
+                {
+                    "day": days,
+                    "time": "20:30",
+                    "location": f"返回 {origin}",
+                    "description": f"行程結束，從 {location} 返回 {origin}。",
+                }
+            )
+    return segments
 
 
 def generate_itinerary(
@@ -178,26 +216,27 @@ def generate_itinerary(
 ) -> list[dict]:
     """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
 
-    回傳通過 Pydantic 驗證的行程段落 list[dict]。失敗時拋出 ValueError。
-    總時長上限約 110 秒（80s 主要嘗試 + 30s 備援），確保不超過 2 分鐘。
+    回傳通過 Pydantic 驗證的行程段落 list[dict]。
+    **保證不失敗**：AI 全部嘗試失敗時，改回傳本地後備行程（永不報錯）。
+    總時長上限約 115 秒，確保不超過 2 分鐘。
     """
-    if not settings.NVIDIA_API_KEY or settings.NVIDIA_API_KEY == "dummy_key_for_now":
-        raise ValueError(
-            "AI 服務尚未設定金鑰（NVIDIA_API_KEY），請於後端環境變數設定後再試。"
-        )
-
     last_error: Exception | None = None
-    for attempt, cfg in enumerate(_ATTEMPTS):
-        try:
-            raw = _call_model(location, days, budget, preferences, origin, **cfg)
-            data = extract_json(raw)
-            if not isinstance(data, list) or not data:
-                raise ValueError("行程內容為空或格式非陣列")
-            # 逐段驗證並正規化
-            segments = [ItinerarySegment(**item).model_dump() for item in data]
-            return segments
-        except Exception as exc:  # 含 openai 認證/連線等例外，統一轉成乾淨錯誤
-            last_error = exc
-            logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
+    # 有金鑰才嘗試呼叫 AI；沒金鑰直接走後備（仍給結果）
+    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
+        for attempt, cfg in enumerate(_ATTEMPTS):
+            try:
+                raw = _call_model(location, days, budget, preferences, origin, **cfg)
+                data = extract_json(raw)
+                if not isinstance(data, list) or not data:
+                    raise ValueError("行程內容為空或格式非陣列")
+                # 逐段驗證並正規化
+                segments = [ItinerarySegment(**item).model_dump() for item in data]
+                if segments:
+                    return segments
+            except Exception as exc:  # 含 openai 認證/連線等例外
+                last_error = exc
+                logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
 
-    raise ValueError(f"AI 行程生成失敗：{last_error}")
+    # 保底：AI 失敗或未設金鑰 → 回傳本地後備行程，確保「絕不生成失敗」
+    logger.error("AI 生成未成功，改用本地後備行程（原因：%s）", last_error)
+    return _fallback_itinerary(location, days, origin)

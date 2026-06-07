@@ -67,31 +67,46 @@ def _call_model(location: str, today: str, temperature: float) -> str:
     return "".join(parts)
 
 
+def _fallback_advice(location: str, today: str) -> dict:
+    """AI 失敗時的保底皮克敏資訊（本地產生，保證有結果）。"""
+    return PikminAdvice(
+        location=location,
+        date=today,
+        regional_pikmin=["依所在大區而定的地區限定裝飾皮克敏"],
+        decor_highlights=[
+            {"place_type": "餐廳／咖啡廳", "decor": "美食類裝飾皮克敏"},
+            {"place_type": "車站／機場", "decor": "交通類裝飾皮克敏"},
+            {"place_type": "公園／景點", "decor": "葉子／花朵類裝飾皮克敏"},
+            {"place_type": "便利商店／商店", "decor": "商店類裝飾皮克敏"},
+        ],
+        current_events=["季節性大花活動", "每月社群日(通常為週末)"],
+        tips=f"在 {location} 多走訪不同類型地點，即可蒐集到對應的裝飾皮克敏。",
+    ).model_dump()
+
+
 def get_pikmin_advice(location: str, today: str) -> dict:
-    """同步呼叫（router 內用 run_in_threadpool 包裝）。回傳通過驗證的 dict。"""
-    if not settings.NVIDIA_API_KEY or settings.NVIDIA_API_KEY == "dummy_key_for_now":
-        raise ValueError(
-            "AI 服務尚未設定金鑰（NVIDIA_API_KEY），請於後端環境變數設定後再試。"
-        )
-
+    """同步呼叫（router 內用 run_in_threadpool 包裝）。
+    **保證不失敗**：AI 失敗時改回傳本地後備資訊。"""
     last_error: Exception | None = None
-    for attempt, temperature in enumerate((0.7, 0.2)):
-        try:
-            raw = _call_model(location, today, temperature)
-            data = extract_json(raw)
-            if not isinstance(data, dict):
-                raise ValueError("皮克敏資訊格式非物件")
-            advice = PikminAdvice(
-                location=location,
-                date=today,
-                regional_pikmin=data.get("regional_pikmin", []),
-                decor_highlights=data.get("decor_highlights", []),
-                current_events=data.get("current_events", []),
-                tips=data.get("tips", ""),
-            )
-            return advice.model_dump()
-        except Exception as exc:  # 含 openai 認證/連線等例外
-            last_error = exc
-            logger.warning("皮克敏建議第 %d 次嘗試失敗：%s", attempt + 1, exc)
+    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
+        for attempt, temperature in enumerate((0.7, 0.2)):
+            try:
+                raw = _call_model(location, today, temperature)
+                data = extract_json(raw)
+                if not isinstance(data, dict):
+                    raise ValueError("皮克敏資訊格式非物件")
+                advice = PikminAdvice(
+                    location=location,
+                    date=today,
+                    regional_pikmin=data.get("regional_pikmin", []),
+                    decor_highlights=data.get("decor_highlights", []),
+                    current_events=data.get("current_events", []),
+                    tips=data.get("tips", ""),
+                )
+                return advice.model_dump()
+            except Exception as exc:  # 含 openai 認證/連線等例外
+                last_error = exc
+                logger.warning("皮克敏建議第 %d 次嘗試失敗：%s", attempt + 1, exc)
 
-    raise ValueError(f"皮克敏建議生成失敗：{last_error}")
+    logger.error("皮克敏 AI 生成未成功，改用本地後備（原因：%s）", last_error)
+    return _fallback_advice(location, today)
