@@ -90,6 +90,19 @@ def verify_email(token: str = Query(...), db: Session = Depends(get_db)):
     return MessageResponse(message="信箱驗證成功，您現在可以登入了。")
 
 
+@router.post("/resend-verification", response_model=MessageResponse)
+def resend_verification(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """重寄驗證信。若帳號存在且未驗證，重新產生 token 並寄出。"""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is not None and not user.is_verified:
+        token = _create_token(
+            db, user, TOKEN_TYPE_VERIFY, settings.VERIFY_TOKEN_EXPIRE_HOURS
+        )
+        send_verification_email(user.email, token.token)
+    # 不洩漏帳號是否存在/是否已驗證
+    return MessageResponse(message="若該信箱尚未驗證，我們已重新寄出驗證連結。")
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(
     form: OAuth2PasswordRequestForm = Depends(),

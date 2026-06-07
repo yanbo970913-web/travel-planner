@@ -11,6 +11,7 @@ const ItineraryDetail = lazy(() => import('./pages/ItineraryDetail'))
 const Login = lazy(() => import('./pages/Login'))
 const Pikmin = lazy(() => import('./pages/Pikmin'))
 const Register = lazy(() => import('./pages/Register'))
+const ResendVerification = lazy(() => import('./pages/ResendVerification'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/resend-verification" element={<ResendVerification />} />
 
           {/* 需登入 */}
           <Route

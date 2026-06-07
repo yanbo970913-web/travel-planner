@@ -59,6 +59,11 @@ export default function Login() {
             還沒有帳號？註冊
           </Link>
         </div>
+        <div className="mt-2 text-sm text-center">
+          <Link to="/resend-verification" className="link">
+            沒收到驗證信？重寄
+          </Link>
+        </div>
       </div>
     </div>
   )
