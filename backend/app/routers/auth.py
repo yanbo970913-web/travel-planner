@@ -56,12 +56,22 @@ def _consume_token(db: Session, raw_token: str, token_type: str) -> Token:
 
 @router.post("/register", response_model=MessageResponse, status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    # 未設定 SMTP 寄信服務時，無法寄驗證信 → 註冊即自動完成驗證（可直接登入）。
+    # 之後在 Render 設好 SMTP_* 後，驗證流程會自動恢復為「需點信箱連結」。
+    auto_verify = settings.SMTP_HOST is None
+
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         if existing.is_verified:
             raise HTTPException(status_code=409, detail="此信箱已被註冊")
-        # 信箱存在但「尚未驗證」→ 視為重新註冊：更新密碼、重寄驗證信
+        # 信箱存在但「尚未驗證」→ 視為重新註冊：更新密碼
         existing.hashed_password = hash_password(payload.password)
+        if auto_verify:
+            existing.is_verified = True
+            db.commit()
+            return MessageResponse(
+                message="帳號已啟用（目前未設定寄信服務，已自動完成驗證），請直接登入。"
+            )
         db.commit()
         token = _create_token(
             db, existing, TOKEN_TYPE_VERIFY, settings.VERIFY_TOKEN_EXPIRE_HOURS
@@ -74,17 +84,21 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
-        is_verified=False,
+        is_verified=auto_verify,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
+    if auto_verify:
+        return MessageResponse(
+            message="註冊成功（目前未設定寄信服務，已自動完成驗證），請直接登入。"
+        )
+
     token = _create_token(
         db, user, TOKEN_TYPE_VERIFY, settings.VERIFY_TOKEN_EXPIRE_HOURS
     )
     send_verification_email(user.email, token.token)
-
     return MessageResponse(message="註冊成功，請至信箱點擊驗證連結後再登入。")
 
 
