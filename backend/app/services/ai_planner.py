@@ -11,7 +11,6 @@ import logging
 import re
 
 from openai import OpenAI
-from pydantic import ValidationError
 
 from app.config import settings
 from app.schemas.itinerary import ItinerarySegment
@@ -134,6 +133,11 @@ def generate_itinerary(
 
     回傳通過 Pydantic 驗證的行程段落 list[dict]。失敗時拋出 ValueError。
     """
+    if not settings.NVIDIA_API_KEY or settings.NVIDIA_API_KEY == "dummy_key_for_now":
+        raise ValueError(
+            "AI 服務尚未設定金鑰（NVIDIA_API_KEY），請於後端環境變數設定後再試。"
+        )
+
     last_error: Exception | None = None
     # 第一次正常溫度，失敗後降溫重試一次
     for attempt, temperature in enumerate((0.7, 0.2)):
@@ -145,7 +149,7 @@ def generate_itinerary(
             # 逐段驗證並正規化
             segments = [ItinerarySegment(**item).model_dump() for item in data]
             return segments
-        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+        except Exception as exc:  # 含 openai 認證/連線等例外，統一轉成乾淨錯誤
             last_error = exc
             logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
 

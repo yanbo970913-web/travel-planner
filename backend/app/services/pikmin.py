@@ -6,8 +6,6 @@ Pikmin Bloom 無官方公開 API，故此功能採「AI 知識生成」：
 """
 import logging
 
-from pydantic import ValidationError
-
 from app.config import settings
 from app.schemas.pikmin import PikminAdvice
 from app.services.ai_planner import _get_client, extract_json
@@ -58,6 +56,11 @@ def _call_model(location: str, today: str, temperature: float) -> str:
 
 def get_pikmin_advice(location: str, today: str) -> dict:
     """同步呼叫（router 內用 run_in_threadpool 包裝）。回傳通過驗證的 dict。"""
+    if not settings.NVIDIA_API_KEY or settings.NVIDIA_API_KEY == "dummy_key_for_now":
+        raise ValueError(
+            "AI 服務尚未設定金鑰（NVIDIA_API_KEY），請於後端環境變數設定後再試。"
+        )
+
     last_error: Exception | None = None
     for attempt, temperature in enumerate((0.7, 0.2)):
         try:
@@ -74,7 +77,7 @@ def get_pikmin_advice(location: str, today: str) -> dict:
                 tips=data.get("tips", ""),
             )
             return advice.model_dump()
-        except (ValidationError, ValueError, KeyError, TypeError) as exc:
+        except Exception as exc:  # 含 openai 認證/連線等例外
             last_error = exc
             logger.warning("皮克敏建議第 %d 次嘗試失敗：%s", attempt + 1, exc)
 
