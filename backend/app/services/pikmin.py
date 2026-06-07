@@ -5,6 +5,7 @@ Pikmin Bloom 無官方公開 API，故此功能採「AI 知識生成」：
 活動資訊反映模型知識，非即時官方資料（前端會明確標示）。
 """
 import logging
+import time
 
 from app.config import settings
 from app.schemas.pikmin import PikminAdvice
@@ -30,7 +31,7 @@ SYSTEM_PROMPT = """你是 Pikmin Bloom（Niantic 的 AR 手遊）的資深玩家
 
 
 def _call_model(location: str, today: str, temperature: float) -> str:
-    completion = _get_client().chat.completions.create(
+    stream = _get_client().chat.completions.create(
         model=settings.NVIDIA_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -46,10 +47,24 @@ def _call_model(location: str, today: str, temperature: float) -> str:
         top_p=0.95,
         max_tokens=2048,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-        stream=False,
-        timeout=45.0,  # 關閉思考加速；單次逾時，2 次嘗試合計 < 100 秒
+        stream=True,
+        timeout=40.0,
     )
-    return completion.choices[0].message.content or ""
+    start = time.monotonic()
+    parts: list[str] = []
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        content = getattr(chunk.choices[0].delta, "content", None)
+        if content:
+            parts.append(content)
+        if time.monotonic() - start > 50.0:  # 單次總時長上限
+            try:
+                stream.close()
+            except Exception:
+                pass
+            break
+    return "".join(parts)
 
 
 def get_pikmin_advice(location: str, today: str) -> dict:

@@ -9,6 +9,7 @@
 import json
 import logging
 import re
+import time
 
 from openai import OpenAI
 
@@ -118,11 +119,14 @@ def _call_model(
     reasoning_budget: int,
     max_tokens: int,
     timeout: float,
+    max_seconds: float,
 ) -> str:
+    """以串流方式呼叫，邊收邊累積；只要持續有資料就不會逾時。
+    用 max_seconds 控制單次總時長上限。"""
     extra_body = {"chat_template_kwargs": {"enable_thinking": thinking}}
     if thinking:
         extra_body["reasoning_budget"] = reasoning_budget
-    completion = _get_client().chat.completions.create(
+    stream = _get_client().chat.completions.create(
         model=settings.NVIDIA_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -137,17 +141,31 @@ def _call_model(
         top_p=0.95,
         max_tokens=max_tokens,
         extra_body=extra_body,
-        stream=False,
+        stream=True,
         timeout=timeout,
     )
-    return completion.choices[0].message.content or ""
+    start = time.monotonic()
+    parts: list[str] = []
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        content = getattr(chunk.choices[0].delta, "content", None)
+        if content:
+            parts.append(content)
+        if time.monotonic() - start > max_seconds:
+            try:
+                stream.close()
+            except Exception:
+                pass
+            break
+    return "".join(parts)
 
 
-# 兩次嘗試：皆關閉思考模式（JSON 行程生成不需思考，且思考會嚴重拖慢、易逾時）。
-# 第一次較大 token、第二次降溫快速備援；總時長控制在 ~2 分鐘內，確保穩定有結果。
+# 兩次嘗試：皆關閉思考模式 + 串流接收（避免整包逾時）。
+# max_seconds 控制每次上限；總時長 ~115 秒，確保 < 2 分鐘且穩定有結果。
 _ATTEMPTS = (
-    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=75.0),
-    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=35.0),
+    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=60.0, max_seconds=90.0),
+    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=40.0, max_seconds=25.0),
 )
 
 
