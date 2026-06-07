@@ -58,7 +58,18 @@ def _consume_token(db: Session, raw_token: str, token_type: str) -> Token:
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
-        raise HTTPException(status_code=409, detail="此信箱已被註冊")
+        if existing.is_verified:
+            raise HTTPException(status_code=409, detail="此信箱已被註冊")
+        # 信箱存在但「尚未驗證」→ 視為重新註冊：更新密碼、重寄驗證信
+        existing.hashed_password = hash_password(payload.password)
+        db.commit()
+        token = _create_token(
+            db, existing, TOKEN_TYPE_VERIFY, settings.VERIFY_TOKEN_EXPIRE_HOURS
+        )
+        send_verification_email(existing.email, token.token)
+        return MessageResponse(
+            message="此信箱先前未完成驗證，已重新寄出驗證連結，請至信箱點擊驗證。"
+        )
 
     user = User(
         email=payload.email,

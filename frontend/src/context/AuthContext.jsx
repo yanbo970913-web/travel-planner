@@ -39,8 +39,13 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  async function deleteAccount() {
+    await client.delete('/users/me')
+    logout()
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )

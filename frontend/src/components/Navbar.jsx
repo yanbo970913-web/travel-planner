@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, deleteAccount } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
@@ -11,6 +11,17 @@ export default function Navbar() {
     logout()
     setOpen(false)
     navigate('/login')
+  }
+
+  async function handleDelete() {
+    if (!confirm('確定要刪除帳號嗎？所有歷史行程將一併刪除，無法復原。')) return
+    try {
+      await deleteAccount()
+      setOpen(false)
+      navigate('/register')
+    } catch {
+      alert('刪除失敗，請稍後再試')
+    }
   }
 
   const links = user ? (
@@ -31,6 +42,9 @@ export default function Navbar() {
       <span className="hidden lg:inline text-slate-500 text-sm px-2">{user.email}</span>
       <button onClick={handleLogout} className="btn-ghost px-3 py-1.5 hover:text-red-400">
         登出
+      </button>
+      <button onClick={handleDelete} className="btn-ghost px-3 py-1.5 text-slate-500 hover:text-red-400">
+        刪除帳號
       </button>
     </>
   ) : (
