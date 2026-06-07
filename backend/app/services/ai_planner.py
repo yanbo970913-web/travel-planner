@@ -52,9 +52,18 @@ SYSTEM_PROMPT = """你是一位專業的全球旅遊行程規劃師。
 
 
 def _build_user_prompt(
-    location: str, days: int, budget: str | None, preferences: str | None
+    location: str,
+    days: int,
+    budget: str | None,
+    preferences: str | None,
+    origin: str | None = None,
 ) -> str:
     parts = [f"我要去【{location}】玩【{days}】天。"]
+    if origin:
+        parts.append(
+            f"我的出發地是【{origin}】，請在第一天開頭安排從出發地到目的地的交通"
+            "（交通方式、班次/路線與大約耗時），最後一天也可安排返程。"
+        )
     if budget:
         parts.append(f"我的預算是：{budget}。")
     if preferences:
@@ -102,6 +111,7 @@ def _call_model(
     days: int,
     budget: str | None,
     preferences: str | None,
+    origin: str | None,
     *,
     temperature: float,
     thinking: bool,
@@ -118,7 +128,9 @@ def _call_model(
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": _build_user_prompt(location, days, budget, preferences),
+                "content": _build_user_prompt(
+                    location, days, budget, preferences, origin
+                ),
             },
         ],
         temperature=temperature,
@@ -131,10 +143,11 @@ def _call_model(
     return completion.choices[0].message.content or ""
 
 
-# 兩次嘗試：第一次高品質（開思考），失敗才用較快的備援；總時長控制在 ~2 分鐘內。
+# 兩次嘗試：皆關閉思考模式（JSON 行程生成不需思考，且思考會嚴重拖慢、易逾時）。
+# 第一次較大 token、第二次降溫快速備援；總時長控制在 ~2 分鐘內，確保穩定有結果。
 _ATTEMPTS = (
-    dict(temperature=0.7, thinking=True, reasoning_budget=1024, max_tokens=4096, timeout=80.0),
-    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=30.0),
+    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=75.0),
+    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=35.0),
 )
 
 
@@ -143,6 +156,7 @@ def generate_itinerary(
     days: int,
     budget: str | None = None,
     preferences: str | None = None,
+    origin: str | None = None,
 ) -> list[dict]:
     """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
 
@@ -157,7 +171,7 @@ def generate_itinerary(
     last_error: Exception | None = None
     for attempt, cfg in enumerate(_ATTEMPTS):
         try:
-            raw = _call_model(location, days, budget, preferences, **cfg)
+            raw = _call_model(location, days, budget, preferences, origin, **cfg)
             data = extract_json(raw)
             if not isinstance(data, list) or not data:
                 raise ValueError("行程內容為空或格式非陣列")

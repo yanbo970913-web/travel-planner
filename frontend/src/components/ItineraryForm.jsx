@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 export default function ItineraryForm({ onSubmit, loading }) {
   const [form, setForm] = useState({
+    origin: '',
     location: '',
     days: 2,
     budget: '',
@@ -15,6 +16,7 @@ export default function ItineraryForm({ onSubmit, loading }) {
   function handleSubmit(e) {
     e.preventDefault()
     onSubmit({
+      origin: form.origin.trim() || null,
       location: form.location.trim(),
       days: Number(form.days),
       budget: form.budget.trim() || null,
@@ -24,6 +26,16 @@ export default function ItineraryForm({ onSubmit, loading }) {
 
   return (
     <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+      <div>
+        <label className="label">起始地（選填）</label>
+        <input
+          value={form.origin}
+          onChange={(e) => update('origin', e.target.value)}
+          placeholder="例如：台北（AI 會安排去回程交通）"
+          className="input"
+        />
+      </div>
+
       <div>
         <label className="label">目的地 *</label>
         <input

@@ -33,13 +33,19 @@ async def generate(
             payload.days,
             payload.budget,
             payload.preferences,
+            payload.origin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
+    title = f"{payload.location} {payload.days} 日遊"
+    if payload.origin:
+        title = f"{payload.origin} → {title}"
+
     itinerary = Itinerary(
         user_id=current_user.id,
-        title=f"{payload.location} {payload.days} 日遊",
+        title=title,
+        origin=payload.origin,
         location=payload.location,
         days=payload.days,
         budget=payload.budget,

@@ -21,6 +21,7 @@ class Itinerary(Base):
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    origin: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 起始地
     location: Mapped[str] = mapped_column(String(255), nullable=False)
     days: Mapped[int] = mapped_column(Integer, nullable=False)
     budget: Mapped[str | None] = mapped_column(String(255), nullable=True)

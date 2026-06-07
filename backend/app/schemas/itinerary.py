@@ -14,6 +14,7 @@ class ItinerarySegment(BaseModel):
 
 
 class GenerateRequest(BaseModel):
+    origin: str | None = Field(default=None, max_length=255)  # 起始地（選填）
     location: str = Field(min_length=1, max_length=255)
     days: int = Field(ge=1, le=30)
     budget: str | None = Field(default=None, max_length=255)
@@ -25,6 +26,7 @@ class ItineraryOut(BaseModel):
 
     id: uuid.UUID
     title: str
+    origin: str | None
     location: str
     days: int
     budget: str | None

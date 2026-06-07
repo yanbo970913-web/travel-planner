@@ -45,12 +45,9 @@ def _call_model(location: str, today: str, temperature: float) -> str:
         temperature=temperature,
         top_p=0.95,
         max_tokens=2048,
-        extra_body={
-            "chat_template_kwargs": {"enable_thinking": True},
-            "reasoning_budget": 1024,
-        },
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         stream=False,
-        timeout=45.0,  # 單次逾時，2 次嘗試合計 < 100 秒
+        timeout=45.0,  # 關閉思考加速；單次逾時，2 次嘗試合計 < 100 秒
     )
     return completion.choices[0].message.content or ""
 

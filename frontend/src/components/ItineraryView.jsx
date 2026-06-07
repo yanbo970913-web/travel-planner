@@ -16,6 +16,7 @@ export default function ItineraryView({ itinerary }) {
       <div>
         <h2 className="text-2xl font-bold text-white">{itinerary.title}</h2>
         <p className="text-slate-400 text-sm mt-1">
+          {itinerary.origin ? `${itinerary.origin} → ` : ''}
           {itinerary.location} · {itinerary.days} 天
           {itinerary.budget ? ` · 預算：${itinerary.budget}` : ''}
         </p>
