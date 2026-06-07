@@ -5,6 +5,9 @@ export default function ItineraryForm({ onSubmit, loading }) {
     origin: '',
     location: '',
     days: 2,
+    start_date: '',
+    departure_time: '',
+    return_time: '',
     budget: '',
     preferences: '',
   })
@@ -19,6 +22,9 @@ export default function ItineraryForm({ onSubmit, loading }) {
       origin: form.origin.trim() || null,
       location: form.location.trim(),
       days: Number(form.days),
+      start_date: form.start_date || null,
+      departure_time: form.departure_time || null,
+      return_time: form.return_time || null,
       budget: form.budget.trim() || null,
       preferences: form.preferences.trim() || null,
     })
@@ -58,6 +64,37 @@ export default function ItineraryForm({ onSubmit, loading }) {
           onChange={(e) => update('days', e.target.value)}
           className="input"
         />
+      </div>
+
+      <div>
+        <label className="label">出發日期（選填）</label>
+        <input
+          type="date"
+          value={form.start_date}
+          onChange={(e) => update('start_date', e.target.value)}
+          className="input"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">去程時間（選填）</label>
+          <input
+            type="time"
+            value={form.departure_time}
+            onChange={(e) => update('departure_time', e.target.value)}
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="label">回程時間（選填）</label>
+          <input
+            type="time"
+            value={form.return_time}
+            onChange={(e) => update('return_time', e.target.value)}
+            className="input"
+          />
+        </div>
       </div>
 
       <div>

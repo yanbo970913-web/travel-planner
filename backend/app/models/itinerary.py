@@ -24,6 +24,9 @@ class Itinerary(Base):
     origin: Mapped[str | None] = mapped_column(String(255), nullable=True)  # 起始地
     location: Mapped[str] = mapped_column(String(255), nullable=False)
     days: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_date: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 出發日期
+    departure_time: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 去程時間
+    return_time: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 回程時間
     budget: Mapped[str | None] = mapped_column(String(255), nullable=True)
     preferences: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     # AI 回傳的結構化行程（list[dict]，每段含 day/location/time/description）

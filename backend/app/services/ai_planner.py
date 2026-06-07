@@ -58,13 +58,22 @@ def _build_user_prompt(
     budget: str | None,
     preferences: str | None,
     origin: str | None = None,
+    start_date: str | None = None,
+    departure_time: str | None = None,
+    return_time: str | None = None,
 ) -> str:
     parts = [f"我要去【{location}】玩【{days}】天。"]
+    if start_date:
+        parts.append(f"出發日期是【{start_date}】，請在行程中標註每天的日期。")
     if origin:
         parts.append(
             f"我的出發地是【{origin}】，請在第一天開頭安排從出發地到目的地的交通"
-            "（交通方式、班次/路線與大約耗時），最後一天也可安排返程。"
+            "（交通方式、班次/路線與大約耗時），最後一天安排返程。"
         )
+    if departure_time:
+        parts.append(f"去程時間約【{departure_time}】，第一天行程請從此時間之後開始。")
+    if return_time:
+        parts.append(f"回程時間約【{return_time}】，最後一天行程請在此時間前結束並安排返程。")
     if budget:
         parts.append(f"我的預算是：{budget}。")
     if preferences:
@@ -108,11 +117,7 @@ def extract_json(content: str):
 
 
 def _call_model(
-    location: str,
-    days: int,
-    budget: str | None,
-    preferences: str | None,
-    origin: str | None,
+    user_prompt: str,
     *,
     model: str,
     nemotron: bool,
@@ -130,12 +135,7 @@ def _call_model(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": _build_user_prompt(
-                    location, days, budget, preferences, origin
-                ),
-            },
+            {"role": "user", "content": user_prompt},
         ],
         temperature=temperature,
         top_p=0.95,
@@ -173,7 +173,11 @@ def _attempts() -> tuple[dict, ...]:
 
 
 def _fallback_itinerary(
-    location: str, days: int, origin: str | None = None
+    location: str,
+    days: int,
+    origin: str | None = None,
+    departure_time: str | None = None,
+    return_time: str | None = None,
 ) -> list[dict]:
     """AI 全部失敗時的保底行程（本地產生，保證有結果、絕不報錯）。"""
     segments: list[dict] = []
@@ -182,11 +186,11 @@ def _fallback_itinerary(
             segments.append(
                 {
                     "day": 1,
-                    "time": "08:00",
+                    "time": departure_time or "08:00",
                     "location": f"從 {origin} 出發",
                     "description": (
-                        f"從 {origin} 前往 {location}，可搭乘高鐵／台鐵／客運或自行開車，"
-                        "抵達後寄放行李、展開行程。"
+                        f"於 {departure_time or '上午'} 從 {origin} 前往 {location}，"
+                        "可搭乘高鐵／台鐵／客運或自行開車，抵達後寄放行李、展開行程。"
                     ),
                 }
             )
@@ -202,9 +206,11 @@ def _fallback_itinerary(
             segments.append(
                 {
                     "day": days,
-                    "time": "20:30",
+                    "time": return_time or "20:30",
                     "location": f"返回 {origin}",
-                    "description": f"行程結束，從 {location} 返回 {origin}。",
+                    "description": (
+                        f"於 {return_time or '傍晚'} 從 {location} 返回 {origin}，行程結束。"
+                    ),
                 }
             )
     return segments
@@ -216,19 +222,25 @@ def generate_itinerary(
     budget: str | None = None,
     preferences: str | None = None,
     origin: str | None = None,
+    start_date: str | None = None,
+    departure_time: str | None = None,
+    return_time: str | None = None,
 ) -> list[dict]:
     """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
 
     回傳通過 Pydantic 驗證的行程段落 list[dict]。
     **保證不失敗**：AI 全部嘗試失敗時，改回傳本地後備行程（永不報錯）。
-    總時長上限約 115 秒，確保不超過 2 分鐘。
+    總時長上限約 70 秒，確保不超過 2 分鐘。
     """
+    user_prompt = _build_user_prompt(
+        location, days, budget, preferences, origin, start_date, departure_time, return_time
+    )
     last_error: Exception | None = None
     # 有金鑰才嘗試呼叫 AI；沒金鑰直接走後備（仍給結果）
     if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
         for attempt, cfg in enumerate(_attempts()):
             try:
-                raw = _call_model(location, days, budget, preferences, origin, **cfg)
+                raw = _call_model(user_prompt, **cfg)
                 data = extract_json(raw)
                 if not isinstance(data, list) or not data:
                     raise ValueError("行程內容為空或格式非陣列")
@@ -242,4 +254,4 @@ def generate_itinerary(
 
     # 保底：AI 失敗或未設金鑰 → 回傳本地後備行程，確保「絕不生成失敗」
     logger.error("AI 生成未成功，改用本地後備行程（原因：%s）", last_error)
-    return _fallback_itinerary(location, days, origin)
+    return _fallback_itinerary(location, days, origin, departure_time, return_time)

@@ -17,6 +17,9 @@ class GenerateRequest(BaseModel):
     origin: str | None = Field(default=None, max_length=255)  # 起始地（選填）
     location: str = Field(min_length=1, max_length=255)
     days: int = Field(ge=1, le=30)
+    start_date: str | None = Field(default=None, max_length=20)  # 出發日期（選填）
+    departure_time: str | None = Field(default=None, max_length=20)  # 去程時間（選填）
+    return_time: str | None = Field(default=None, max_length=20)  # 回程時間（選填）
     budget: str | None = Field(default=None, max_length=255)
     preferences: str | None = Field(default=None, max_length=1000)
 
@@ -29,6 +32,9 @@ class ItineraryOut(BaseModel):
     origin: str | None
     location: str
     days: int
+    start_date: str | None
+    departure_time: str | None
+    return_time: str | None
     budget: str | None
     preferences: str | None
     plan: list[ItinerarySegment]

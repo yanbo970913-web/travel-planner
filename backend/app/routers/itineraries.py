@@ -34,6 +34,9 @@ async def generate(
             payload.budget,
             payload.preferences,
             payload.origin,
+            payload.start_date,
+            payload.departure_time,
+            payload.return_time,
         )
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
@@ -48,6 +51,9 @@ async def generate(
         origin=payload.origin,
         location=payload.location,
         days=payload.days,
+        start_date=payload.start_date,
+        departure_time=payload.departure_time,
+        return_time=payload.return_time,
         budget=payload.budget,
         preferences=payload.preferences,
         plan=plan,
