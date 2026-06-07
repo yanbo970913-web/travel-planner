@@ -50,6 +50,7 @@ def _call_model(location: str, today: str, temperature: float) -> str:
             "reasoning_budget": 1024,
         },
         stream=False,
+        timeout=45.0,  # 單次逾時，2 次嘗試合計 < 100 秒
     )
     return completion.choices[0].message.content or ""
 

@@ -26,6 +26,8 @@ def _get_client() -> OpenAI:
         _client = OpenAI(
             base_url=settings.NVIDIA_BASE_URL,
             api_key=settings.NVIDIA_API_KEY,
+            timeout=80.0,      # 單次請求逾時，避免無限卡住
+            max_retries=0,     # 關閉 SDK 內建重試（改由我們自己控制，確保總時長可控）
         )
     return _client
 
@@ -100,8 +102,16 @@ def _call_model(
     days: int,
     budget: str | None,
     preferences: str | None,
+    *,
     temperature: float,
+    thinking: bool,
+    reasoning_budget: int,
+    max_tokens: int,
+    timeout: float,
 ) -> str:
+    extra_body = {"chat_template_kwargs": {"enable_thinking": thinking}}
+    if thinking:
+        extra_body["reasoning_budget"] = reasoning_budget
     completion = _get_client().chat.completions.create(
         model=settings.NVIDIA_MODEL,
         messages=[
@@ -113,14 +123,19 @@ def _call_model(
         ],
         temperature=temperature,
         top_p=0.95,
-        max_tokens=4096,
-        extra_body={
-            "chat_template_kwargs": {"enable_thinking": True},
-            "reasoning_budget": 2048,
-        },
+        max_tokens=max_tokens,
+        extra_body=extra_body,
         stream=False,
+        timeout=timeout,
     )
     return completion.choices[0].message.content or ""
+
+
+# 兩次嘗試：第一次高品質（開思考），失敗才用較快的備援；總時長控制在 ~2 分鐘內。
+_ATTEMPTS = (
+    dict(temperature=0.7, thinking=True, reasoning_budget=1024, max_tokens=4096, timeout=80.0),
+    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=30.0),
+)
 
 
 def generate_itinerary(
@@ -132,6 +147,7 @@ def generate_itinerary(
     """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
 
     回傳通過 Pydantic 驗證的行程段落 list[dict]。失敗時拋出 ValueError。
+    總時長上限約 110 秒（80s 主要嘗試 + 30s 備援），確保不超過 2 分鐘。
     """
     if not settings.NVIDIA_API_KEY or settings.NVIDIA_API_KEY == "dummy_key_for_now":
         raise ValueError(
@@ -139,10 +155,9 @@ def generate_itinerary(
         )
 
     last_error: Exception | None = None
-    # 第一次正常溫度，失敗後降溫重試一次
-    for attempt, temperature in enumerate((0.7, 0.2)):
+    for attempt, cfg in enumerate(_ATTEMPTS):
         try:
-            raw = _call_model(location, days, budget, preferences, temperature)
+            raw = _call_model(location, days, budget, preferences, **cfg)
             data = extract_json(raw)
             if not isinstance(data, list) or not data:
                 raise ValueError("行程內容為空或格式非陣列")
