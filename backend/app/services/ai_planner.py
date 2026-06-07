@@ -18,19 +18,30 @@ from app.schemas.itinerary import ItinerarySegment
 
 logger = logging.getLogger("app.ai_planner")
 
-_client: OpenAI | None = None
+_clients: dict[str, OpenAI] = {}
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(
-            base_url=settings.NVIDIA_BASE_URL,
-            api_key=settings.NVIDIA_API_KEY,
-            timeout=80.0,      # 單次請求逾時，避免無限卡住
-            max_retries=0,     # 關閉 SDK 內建重試（改由我們自己控制，確保總時長可控）
+def _get_client(provider: str = "nvidia") -> OpenAI:
+    """取得供應商的 OpenAI 相容 client（groq / nvidia）。"""
+    if provider not in _clients:
+        if provider == "groq":
+            base_url, api_key = settings.GROQ_BASE_URL, settings.GROQ_API_KEY
+        else:
+            base_url, api_key = settings.NVIDIA_BASE_URL, settings.NVIDIA_API_KEY
+        _clients[provider] = OpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=60.0,   # 單次請求逾時
+            max_retries=0,  # 關閉 SDK 內建重試，總時長自行控制
         )
-    return _client
+    return _clients[provider]
+
+
+def has_working_ai() -> bool:
+    """是否有可用的 AI 金鑰（Groq 或 NVIDIA）。"""
+    if settings.GROQ_API_KEY:
+        return True
+    return bool(settings.NVIDIA_API_KEY) and settings.NVIDIA_API_KEY != "dummy_key_for_now"
 
 
 SYSTEM_PROMPT = """你是一位專業的全球旅遊行程規劃師。
@@ -119,6 +130,7 @@ def extract_json(content: str):
 def _call_model(
     user_prompt: str,
     *,
+    provider: str,
     model: str,
     nemotron: bool,
     temperature: float,
@@ -131,7 +143,7 @@ def _call_model(
     kwargs = {}
     if nemotron:
         kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-    stream = _get_client().chat.completions.create(
+    stream = _get_client(provider).chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -164,56 +176,18 @@ def _call_model(
 # 多模型嘗試（串流）：先用快速模型，失敗才試 550B Ultra，全失敗再用本地後備。
 # 總時長控制在 ~2 分鐘內。
 def _attempts() -> tuple[dict, ...]:
-    return (
-        dict(model=settings.NVIDIA_FAST_MODEL, nemotron=False, temperature=0.7,
-             max_tokens=4096, timeout=45.0, max_seconds=48.0),
-        dict(model=settings.NVIDIA_MODEL, nemotron=True, temperature=0.5,
-             max_tokens=3500, timeout=25.0, max_seconds=25.0),
-    )
-
-
-def _fallback_itinerary(
-    location: str,
-    days: int,
-    origin: str | None = None,
-    departure_time: str | None = None,
-    return_time: str | None = None,
-) -> list[dict]:
-    """AI 全部失敗時的保底行程（本地產生，保證有結果、絕不報錯）。"""
-    segments: list[dict] = []
-    for d in range(1, days + 1):
-        if d == 1 and origin:
-            segments.append(
-                {
-                    "day": 1,
-                    "time": departure_time or "08:00",
-                    "location": f"從 {origin} 出發",
-                    "description": (
-                        f"於 {departure_time or '上午'} 從 {origin} 前往 {location}，"
-                        "可搭乘高鐵／台鐵／客運或自行開車，抵達後寄放行李、展開行程。"
-                    ),
-                }
-            )
-        slots = [
-            ("09:30", f"{location} 代表性景點", "走訪當地最具代表性的景點，認識在地特色。"),
-            ("12:00", "在地特色午餐", "品嚐當地特色美食與小吃。"),
-            ("14:30", f"{location} 老街／文化景點", "漫步老街或文化景點，體驗在地風情與選購伴手禮。"),
-            ("18:00", "夜市／晚餐", "享用晚餐，並逛逛附近夜市或商圈。"),
-        ]
-        for t, loc, desc in slots:
-            segments.append({"day": d, "time": t, "location": loc, "description": desc})
-        if d == days and origin:
-            segments.append(
-                {
-                    "day": days,
-                    "time": return_time or "20:30",
-                    "location": f"返回 {origin}",
-                    "description": (
-                        f"於 {return_time or '傍晚'} 從 {location} 返回 {origin}，行程結束。"
-                    ),
-                }
-            )
-    return segments
+    a: list[dict] = []
+    # Groq 為主力（雲端連得到、快、真實 AI）
+    if settings.GROQ_API_KEY:
+        a.append(dict(provider="groq", model=settings.GROQ_MODEL, nemotron=False,
+                      temperature=0.7, max_tokens=4096, timeout=40.0, max_seconds=45.0))
+    # NVIDIA 為次要（本機可用；雲端常被擋）
+    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
+        a.append(dict(provider="nvidia", model=settings.NVIDIA_FAST_MODEL, nemotron=False,
+                      temperature=0.7, max_tokens=4096, timeout=35.0, max_seconds=38.0))
+        a.append(dict(provider="nvidia", model=settings.NVIDIA_MODEL, nemotron=True,
+                      temperature=0.5, max_tokens=3500, timeout=20.0, max_seconds=20.0))
+    return tuple(a)
 
 
 def generate_itinerary(
@@ -228,30 +202,33 @@ def generate_itinerary(
 ) -> list[dict]:
     """同步呼叫（在 router 內用 run_in_threadpool 包裝）。
 
-    回傳通過 Pydantic 驗證的行程段落 list[dict]。
-    **保證不失敗**：AI 全部嘗試失敗時，改回傳本地後備行程（永不報錯）。
-    總時長上限約 70 秒，確保不超過 2 分鐘。
+    回傳通過 Pydantic 驗證的行程段落 list[dict]，全部由 AI 真實生成。
+    **絕不捏造**：AI 無法產生時直接報錯（不回傳通用範本假內容）。
+    依序嘗試 Groq → NVIDIA，總時長控制在 2 分鐘內。
     """
+    attempts = _attempts()
+    if not attempts:
+        raise ValueError(
+            "AI 服務尚未設定金鑰，請於後端設定 GROQ_API_KEY（建議）或 NVIDIA_API_KEY。"
+        )
+
     user_prompt = _build_user_prompt(
         location, days, budget, preferences, origin, start_date, departure_time, return_time
     )
     last_error: Exception | None = None
-    # 有金鑰才嘗試呼叫 AI；沒金鑰直接走後備（仍給結果）
-    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
-        for attempt, cfg in enumerate(_attempts()):
-            try:
-                raw = _call_model(user_prompt, **cfg)
-                data = extract_json(raw)
-                if not isinstance(data, list) or not data:
-                    raise ValueError("行程內容為空或格式非陣列")
-                # 逐段驗證並正規化
-                segments = [ItinerarySegment(**item).model_dump() for item in data]
-                if segments:
-                    return segments
-            except Exception as exc:  # 含 openai 認證/連線等例外
-                last_error = exc
-                logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
+    for attempt, cfg in enumerate(attempts):
+        try:
+            raw = _call_model(user_prompt, **cfg)
+            data = extract_json(raw)
+            if not isinstance(data, list) or not data:
+                raise ValueError("行程內容為空或格式非陣列")
+            segments = [ItinerarySegment(**item).model_dump() for item in data]
+            if segments:
+                return segments
+        except Exception as exc:  # 含 openai 認證/連線等例外
+            last_error = exc
+            logger.warning("AI 行程生成第 %d 次嘗試失敗：%s", attempt + 1, exc)
 
-    # 保底：AI 失敗或未設金鑰 → 回傳本地後備行程，確保「絕不生成失敗」
-    logger.error("AI 生成未成功，改用本地後備行程（原因：%s）", last_error)
-    return _fallback_itinerary(location, days, origin, departure_time, return_time)
+    # 誠實報錯，絕不捏造假行程
+    logger.error("AI 行程生成失敗：%s", last_error)
+    raise ValueError("AI 服務暫時無法使用，請稍後再試（為確保行程真實可靠，系統不會自動產生範本內容）。")

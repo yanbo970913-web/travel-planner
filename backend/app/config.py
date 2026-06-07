@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # 主力快速模型（回應快、雲端穩定）；550B 作為次要嘗試
     NVIDIA_FAST_MODEL: str = "meta/llama-3.1-70b-instruct"
 
+    # --- Groq（主力 AI：免費、極快、雲端可連，給真實可靠行程）---
+    GROQ_API_KEY: str = ""  # 由使用者於 Render 環境變數設定
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
     # --- Email（寄信服務）---
     # 未設定 SMTP_HOST 時，寄信改為印出連結到 log（dev fallback）。
     SMTP_HOST: Optional[str] = None

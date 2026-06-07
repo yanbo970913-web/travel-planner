@@ -30,9 +30,11 @@ SYSTEM_PROMPT = """你是 Pikmin Bloom（Niantic 的 AR 手遊）的資深玩家
 """
 
 
-def _call_model(location: str, today: str, temperature: float) -> str:
-    stream = _get_client().chat.completions.create(
-        model=settings.NVIDIA_FAST_MODEL,  # 用快速模型，雲端穩定
+def _call_model(
+    location: str, today: str, temperature: float, provider: str, model: str
+) -> str:
+    stream = _get_client(provider).chat.completions.create(
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -66,46 +68,42 @@ def _call_model(location: str, today: str, temperature: float) -> str:
     return "".join(parts)
 
 
-def _fallback_advice(location: str, today: str) -> dict:
-    """AI 失敗時的保底皮克敏資訊（本地產生，保證有結果）。"""
-    return PikminAdvice(
-        location=location,
-        date=today,
-        regional_pikmin=["依所在大區而定的地區限定裝飾皮克敏"],
-        decor_highlights=[
-            {"place_type": "餐廳／咖啡廳", "decor": "美食類裝飾皮克敏"},
-            {"place_type": "車站／機場", "decor": "交通類裝飾皮克敏"},
-            {"place_type": "公園／景點", "decor": "葉子／花朵類裝飾皮克敏"},
-            {"place_type": "便利商店／商店", "decor": "商店類裝飾皮克敏"},
-        ],
-        current_events=["季節性大花活動", "每月社群日(通常為週末)"],
-        tips=f"在 {location} 多走訪不同類型地點，即可蒐集到對應的裝飾皮克敏。",
-    ).model_dump()
+def _pikmin_provider() -> tuple[str, str] | None:
+    """選擇供應商與模型：Groq 優先，否則 NVIDIA。都沒設則 None。"""
+    if settings.GROQ_API_KEY:
+        return ("groq", settings.GROQ_MODEL)
+    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
+        return ("nvidia", settings.NVIDIA_FAST_MODEL)
+    return None
 
 
 def get_pikmin_advice(location: str, today: str) -> dict:
     """同步呼叫（router 內用 run_in_threadpool 包裝）。
-    **保證不失敗**：AI 失敗時改回傳本地後備資訊。"""
-    last_error: Exception | None = None
-    if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
-        for attempt, temperature in enumerate((0.7, 0.2)):
-            try:
-                raw = _call_model(location, today, temperature)
-                data = extract_json(raw)
-                if not isinstance(data, dict):
-                    raise ValueError("皮克敏資訊格式非物件")
-                advice = PikminAdvice(
-                    location=location,
-                    date=today,
-                    regional_pikmin=data.get("regional_pikmin", []),
-                    decor_highlights=data.get("decor_highlights", []),
-                    current_events=data.get("current_events", []),
-                    tips=data.get("tips", ""),
-                )
-                return advice.model_dump()
-            except Exception as exc:  # 含 openai 認證/連線等例外
-                last_error = exc
-                logger.warning("皮克敏建議第 %d 次嘗試失敗：%s", attempt + 1, exc)
+    **絕不捏造**：AI 無法產生時直接報錯，不回傳通用假資訊。"""
+    pm = _pikmin_provider()
+    if pm is None:
+        raise ValueError("AI 服務尚未設定金鑰（GROQ_API_KEY 或 NVIDIA_API_KEY）。")
+    provider, model = pm
 
-    logger.error("皮克敏 AI 生成未成功，改用本地後備（原因：%s）", last_error)
-    return _fallback_advice(location, today)
+    last_error: Exception | None = None
+    for attempt, temperature in enumerate((0.7, 0.2)):
+        try:
+            raw = _call_model(location, today, temperature, provider, model)
+            data = extract_json(raw)
+            if not isinstance(data, dict):
+                raise ValueError("皮克敏資訊格式非物件")
+            advice = PikminAdvice(
+                location=location,
+                date=today,
+                regional_pikmin=data.get("regional_pikmin", []),
+                decor_highlights=data.get("decor_highlights", []),
+                current_events=data.get("current_events", []),
+                tips=data.get("tips", ""),
+            )
+            return advice.model_dump()
+        except Exception as exc:  # 含 openai 認證/連線等例外
+            last_error = exc
+            logger.warning("皮克敏建議第 %d 次嘗試失敗：%s", attempt + 1, exc)
+
+    logger.error("皮克敏 AI 生成失敗：%s", last_error)
+    raise ValueError("AI 服務暫時無法使用，請稍後再試（為確保資訊真實，系統不會自動產生範本內容）。")
