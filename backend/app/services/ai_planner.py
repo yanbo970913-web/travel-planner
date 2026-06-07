@@ -164,8 +164,8 @@ def _call_model(
 # 兩次嘗試：皆關閉思考模式 + 串流接收（避免整包逾時）。
 # max_seconds 控制每次上限；總時長 ~115 秒，確保 < 2 分鐘且穩定有結果。
 _ATTEMPTS = (
-    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=55.0, max_seconds=60.0),
-    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=25.0, max_seconds=25.0),
+    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=45.0, max_seconds=48.0),
+    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=18.0, max_seconds=18.0),
 )
 
 
