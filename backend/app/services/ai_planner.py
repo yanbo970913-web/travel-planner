@@ -114,20 +114,20 @@ def _call_model(
     preferences: str | None,
     origin: str | None,
     *,
+    model: str,
+    nemotron: bool,
     temperature: float,
-    thinking: bool,
-    reasoning_budget: int,
     max_tokens: int,
     timeout: float,
     max_seconds: float,
 ) -> str:
     """以串流方式呼叫，邊收邊累積；只要持續有資料就不會逾時。
-    用 max_seconds 控制單次總時長上限。"""
-    extra_body = {"chat_template_kwargs": {"enable_thinking": thinking}}
-    if thinking:
-        extra_body["reasoning_budget"] = reasoning_budget
+    用 max_seconds 控制單次總時長上限。nemotron 模型才送 thinking 參數。"""
+    kwargs = {}
+    if nemotron:
+        kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
     stream = _get_client().chat.completions.create(
-        model=settings.NVIDIA_MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -140,9 +140,9 @@ def _call_model(
         temperature=temperature,
         top_p=0.95,
         max_tokens=max_tokens,
-        extra_body=extra_body,
         stream=True,
         timeout=timeout,
+        **kwargs,
     )
     start = time.monotonic()
     parts: list[str] = []
@@ -161,12 +161,15 @@ def _call_model(
     return "".join(parts)
 
 
-# 兩次嘗試：皆關閉思考模式 + 串流接收（避免整包逾時）。
-# max_seconds 控制每次上限；總時長 ~115 秒，確保 < 2 分鐘且穩定有結果。
-_ATTEMPTS = (
-    dict(temperature=0.7, thinking=False, reasoning_budget=0, max_tokens=4096, timeout=45.0, max_seconds=48.0),
-    dict(temperature=0.3, thinking=False, reasoning_budget=0, max_tokens=3000, timeout=18.0, max_seconds=18.0),
-)
+# 多模型嘗試（串流）：先用快速模型，失敗才試 550B Ultra，全失敗再用本地後備。
+# 總時長控制在 ~2 分鐘內。
+def _attempts() -> tuple[dict, ...]:
+    return (
+        dict(model=settings.NVIDIA_FAST_MODEL, nemotron=False, temperature=0.7,
+             max_tokens=4096, timeout=45.0, max_seconds=48.0),
+        dict(model=settings.NVIDIA_MODEL, nemotron=True, temperature=0.5,
+             max_tokens=3500, timeout=25.0, max_seconds=25.0),
+    )
 
 
 def _fallback_itinerary(
@@ -223,7 +226,7 @@ def generate_itinerary(
     last_error: Exception | None = None
     # 有金鑰才嘗試呼叫 AI；沒金鑰直接走後備（仍給結果）
     if settings.NVIDIA_API_KEY and settings.NVIDIA_API_KEY != "dummy_key_for_now":
-        for attempt, cfg in enumerate(_ATTEMPTS):
+        for attempt, cfg in enumerate(_attempts()):
             try:
                 raw = _call_model(location, days, budget, preferences, origin, **cfg)
                 data = extract_json(raw)

@@ -30,7 +30,9 @@ class Settings(BaseSettings):
     # --- NVIDIA AI ---
     NVIDIA_API_KEY: str = "dummy_key_for_now"  # 使用者稍後提供真正金鑰
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    NVIDIA_MODEL: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    NVIDIA_MODEL: str = "nvidia/nemotron-3-ultra-550b-a55b"  # 高品質但較慢（雲端常逾時）
+    # 主力快速模型（回應快、雲端穩定）；550B 作為次要嘗試
+    NVIDIA_FAST_MODEL: str = "meta/llama-3.1-70b-instruct"
 
     # --- Email（寄信服務）---
     # 未設定 SMTP_HOST 時，寄信改為印出連結到 log（dev fallback）。

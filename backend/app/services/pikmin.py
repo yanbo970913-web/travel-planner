@@ -32,7 +32,7 @@ SYSTEM_PROMPT = """你是 Pikmin Bloom（Niantic 的 AR 手遊）的資深玩家
 
 def _call_model(location: str, today: str, temperature: float) -> str:
     stream = _get_client().chat.completions.create(
-        model=settings.NVIDIA_MODEL,
+        model=settings.NVIDIA_FAST_MODEL,  # 用快速模型，雲端穩定
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -46,7 +46,6 @@ def _call_model(location: str, today: str, temperature: float) -> str:
         temperature=temperature,
         top_p=0.95,
         max_tokens=2048,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         stream=True,
         timeout=40.0,
     )
