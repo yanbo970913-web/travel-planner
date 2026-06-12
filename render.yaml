@@ -1,10 +1,9 @@
-# Render Blueprint：一鍵建立 PostgreSQL + 後端 Web Service + 前端 Static Site
-# 部署方式：將整個 repo push 到 GitHub → Render Dashboard → New → Blueprint → 選此 repo
-databases:
-  - name: travel-db
-    plan: free
-    databaseName: travel
-    user: travel
+# Render Blueprint：建立「後端 Web Service + 前端 Static Site」。
+# 資料庫改用 Neon 永久免費 PostgreSQL（不會像 Render 免費 DB 約 30 天後被刪），
+# 部署時把 Neon 的連線字串貼到 DATABASE_URL 即可。
+#
+# 部署方式：repo push 到 GitHub → Render Dashboard → New → Blueprint → 選此 repo，
+# 再依 README「三、部署到 Render」填入標記 sync:false 的環境變數。
 
 services:
   # ---- 後端 FastAPI ----
@@ -17,15 +16,19 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: travel-db
-          property: connectionString
+        sync: false # 貼上 Neon 的連線字串（postgresql://...?sslmode=require）
       - key: JWT_SECRET
         generateValue: true # Render 自動產生隨機值
       - key: ENV
         value: production
+      # AI 引擎（主力：Groq，免費、雲端穩定、極快）
+      - key: GROQ_API_KEY
+        sync: false # 部署後在 Dashboard 填入 Groq 金鑰（https://console.groq.com）
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      # AI 引擎（次要：NVIDIA，可留空）
       - key: NVIDIA_API_KEY
-        sync: false # 部署後在 Dashboard 手動填入真正金鑰
+        sync: false # 選填；不用 NVIDIA 可不填
       - key: NVIDIA_MODEL
         value: nvidia/nemotron-3-ultra-550b-a55b
       - key: FRONTEND_URL

@@ -77,7 +77,7 @@ export default function App() {
       </Suspense>
       </main>
       <footer className="border-t border-slate-800 py-5 text-center text-xs text-slate-500">
-        ✈️ 自動化行程規劃系統 · Powered by NVIDIA Nemotron AI
+        ✈️ 自動化行程規劃系統 · 行程 by AI（Groq / NVIDIA）· 天氣 by Open-Meteo
       </footer>
     </div>
   )

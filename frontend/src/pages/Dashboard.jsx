@@ -3,6 +3,7 @@ import client, { apiError } from '../api/client'
 import ItineraryForm from '../components/ItineraryForm'
 import ItineraryView from '../components/ItineraryView'
 import PikminAdvice from '../components/PikminAdvice'
+import WeatherForecast from '../components/WeatherForecast'
 
 export default function Dashboard() {
   const [result, setResult] = useState(null)
@@ -45,6 +46,13 @@ export default function Dashboard() {
             <>
               <div className="alert-success mb-4">已產生並儲存到你的歷史行程！</div>
               <ItineraryView itinerary={result} />
+              <div className="mt-6">
+                <WeatherForecast
+                  location={result.location}
+                  startDate={result.start_date}
+                  days={result.days}
+                />
+              </div>
               <div className="mt-6">
                 <PikminAdvice location={result.location} />
               </div>

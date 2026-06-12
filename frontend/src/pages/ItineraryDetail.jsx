@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import client, { apiError } from '../api/client'
 import ItineraryView from '../components/ItineraryView'
 import PikminAdvice from '../components/PikminAdvice'
+import WeatherForecast from '../components/WeatherForecast'
 
 export default function ItineraryDetail() {
   const { id } = useParams()
@@ -33,6 +34,14 @@ export default function ItineraryDetail() {
         ) : (
           <>
             <ItineraryView itinerary={itinerary} />
+            {/* 融入行程：目的地天氣預報 */}
+            <div className="mt-6">
+              <WeatherForecast
+                location={itinerary.location}
+                startDate={itinerary.start_date}
+                days={itinerary.days}
+              />
+            </div>
             {/* 融入行程：此目的地的皮克敏情報 */}
             <div className="mt-6">
               <PikminAdvice location={itinerary.location} />

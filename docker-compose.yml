@@ -24,8 +24,11 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/travel
       JWT_SECRET: dev_secret_change_me
+      # 主力 AI（Groq）；本機若要實測 AI 生成，先 export GROQ_API_KEY
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-dummy_key_for_now}
       FRONTEND_URL: http://localhost:5173
+      # 天氣（Open-Meteo + Nominatim）免金鑰，無需設定
       # 未設 SMTP_HOST → 寄信退回 log fallback
     ports:
       - "8000:8000"

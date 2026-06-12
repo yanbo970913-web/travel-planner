@@ -1,12 +1,13 @@
 # 自動化行程規劃系統
 
-依天數、預算、偏好，用 NVIDIA Nemotron AI 自動生成國內外旅遊行程，並具備完整會員系統（含信箱驗證）與歷史行程儲存。
+依天數、預算、偏好，用 AI 自動生成國內外旅遊行程，整合**每日天氣預報**與皮克敏情報，並具備完整會員系統（含信箱驗證）與歷史行程儲存。
 
 - **後端**：FastAPI + SQLAlchemy + Alembic
 - **前端**：React + Vite + Tailwind CSS
-- **資料庫**：PostgreSQL
-- **AI 引擎**：NVIDIA `nvidia/nemotron-3-ultra-550b-a55b`
-- **部署**：Render（PostgreSQL + 後端 Web Service + 前端 Static Site）
+- **資料庫**：PostgreSQL（雲端建議 [Neon](https://neon.tech) 永久免費）
+- **AI 引擎**：主力 Groq `llama-3.3-70b-versatile`（免費、極快、雲端穩定）；次要 NVIDIA `nemotron-3-ultra-550b-a55b`
+- **天氣**：[Open-Meteo](https://open-meteo.com) 預報 + [OpenStreetMap Nominatim](https://nominatim.org) 地理編碼（皆免費免金鑰）
+- **部署**：Render（後端 Web Service + 前端 Static Site）+ Neon（資料庫）
 
 ---
 
@@ -70,37 +71,53 @@ cd backend
 
 | 變數 | 用途 | 備註 |
 |------|------|------|
-| `NVIDIA_API_KEY` | AI 行程生成金鑰 | **你稍後提供**；未填會用 dummy 值，AI 呼叫會失敗 |
-| `JWT_SECRET` | 登入簽章密鑰 | 產生：`python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `DATABASE_URL` | 資料庫連線 | 本機由 docker-compose 提供；Render 自動注入 |
+| `GROQ_API_KEY` | **主力** AI 行程生成金鑰 | 免費申請：<https://console.groq.com> 。未填則改用 NVIDIA |
+| `NVIDIA_API_KEY` | 次要 AI 金鑰 | 選填，可留空 |
+| `JWT_SECRET` | 登入簽章密鑰 | 產生：`python -c "import secrets; print(secrets.token_urlsafe(48))"`（Render 可自動產生） |
+| `DATABASE_URL` | 資料庫連線 | 本機由 docker-compose 提供；雲端貼上 Neon 連線字串 |
 | `SMTP_HOST/PORT/USER/PASSWORD/EMAIL_FROM` | 寄信服務 | 選填。未填則寄信退回 log fallback |
 | `FRONTEND_URL` | 信件連結與 CORS 來源 | 本機 `http://localhost:5173`；部署填前端網址 |
 
+> 天氣預報用 Open-Meteo + OpenStreetMap，**免金鑰、免設定**，部署後即可使用。
+
 ---
 
-## 三、部署到 Render（上線）
+## 三、部署到 Render + Neon（免費上線）
 
-> 我已備好 `render.yaml`、`backend/Dockerfile`，啟動時會自動跑 `alembic upgrade head` 建表。
-> **最後這幾步需要你用自己的 Render 帳號操作：**
+> 全程免費。資料庫用 **Neon 永久免費 PostgreSQL**（不會像 Render 免費 DB 約 30 天後被刪除），
+> 後端／前端用 **Render 免費方案**。我已備好 `render.yaml`、`backend/Dockerfile`，
+> 後端啟動時會自動跑 `alembic upgrade head` 建表。
 
-1. **把整個專案推上 GitHub**
-   ```bash
-   git init && git add . && git commit -m "init"
-   git branch -M main
-   git remote add origin <你的 GitHub repo 網址>
-   git push -u origin main
-   ```
-2. **Render → New → Blueprint**，選擇剛剛的 repo。Render 會讀 `render.yaml`，自動建立：
-   - `travel-db`（PostgreSQL）
-   - `travel-backend`（後端）
-   - `travel-frontend`（前端）
-3. **填入標記為 `sync: false` 的環境變數**（Render 不會自動帶）：
-   - `travel-backend` → `NVIDIA_API_KEY`（你的真正金鑰）、`FRONTEND_URL`（填 `travel-frontend` 的網址）、以及（選填）SMTP 相關。
-   - `travel-frontend` → `VITE_API_BASE_URL`（填 `travel-backend` 的網址）。
-4. 因前後端網址互相依賴，**第一次部署完成後，回填上述網址再各 Redeploy 一次**即可。
-5. 開 `travel-frontend` 網址，完整測試：註冊 → 收驗證信（或看後端 log 的連結）→ 驗證 → 登入 → 產生行程 → 查看歷史。
+**步驟 0：建立 Neon 免費資料庫（約 2 分鐘）**
+1. 到 <https://neon.tech> 用 GitHub 註冊（免費）。
+2. New Project → 建立後在 **Connection string** 複製連線字串（形如
+   `postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`）。
+   待會貼到 Render 的 `DATABASE_URL`。
 
-> 注意：Render free plan 的服務閒置會休眠，首次請求需數十秒喚醒；資料庫 free plan 有保存期限，正式上線建議升級方案。
+**步驟 1：把整個專案推上 GitHub**
+```bash
+git add . && git commit -m "deploy"
+git push
+```
+
+**步驟 2：Render → New → Blueprint**，選擇此 repo。Render 會讀 `render.yaml`，自動建立：
+   - `travel-backend`（後端 Docker）
+   - `travel-frontend`（前端 Static Site）
+
+**步驟 3：填入標記為 `sync: false` 的環境變數**（Render 不會自動帶）：
+   - `travel-backend` →
+     - `DATABASE_URL`（步驟 0 的 Neon 連線字串）
+     - `GROQ_API_KEY`（你的 Groq 金鑰，<https://console.groq.com> 免費申請）
+     - `FRONTEND_URL`（填 `travel-frontend` 的網址，例如 `https://travel-frontend.onrender.com`）
+     - （選填）`NVIDIA_API_KEY`、SMTP 相關
+   - `travel-frontend` → `VITE_API_BASE_URL`（填 `travel-backend` 的網址）
+
+**步驟 4：** 因前後端網址互相依賴，**第一次部署完成後，回填上述網址再各 Redeploy 一次**即可。
+
+**步驟 5：** 開 `travel-frontend` 網址，完整測試：註冊 → 收驗證信（或看後端 log 的連結）→ 驗證 → 登入 → 產生行程（含天氣預報）→ 查看歷史。
+
+> 注意：Render 免費方案的服務閒置 15 分鐘會休眠，首次請求需數十秒喚醒（前端會顯示載入中）。
+> 要避免休眠可用免費的 [UptimeRobot](https://uptimerobot.com) 每 10 分鐘 ping 後端 `/health`。
 
 ---
 
@@ -118,6 +135,7 @@ cd backend
 | GET | `/itineraries` | 歷史行程清單 |
 | GET | `/itineraries/{id}` | 行程詳情 |
 | DELETE | `/itineraries/{id}` | 刪除行程 |
+| GET | `/weather?location=&start_date=&days=` | 目的地每日天氣預報（Open-Meteo，免金鑰） |
 | GET | `/pikmin/advice?location=` | 皮克敏情報（依地點，每日快取） |
 
 ## 五、皮克敏探索（Pikmin Bloom 玩家專用）
